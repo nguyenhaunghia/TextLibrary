@@ -57,37 +57,46 @@ async function bootstrap() {
         }
         // Nếu là trang Login
         else if (document.getElementById('loginFormContent')) {
-            // Không cần load data sheet
+            // Không cần load data sheet tại trang login để tiết kiệm bộ nhớ
         }
 
     } catch (err) {
         console.error(err);
-        alert("Lỗi tải dữ liệu: " + err.message);
+        alert("Lỗi tải dữ liệu (Memory): " + err.message);
     } finally {
         const loader = document.getElementById('loadingScreen');
         if (loader) loader.classList.add('hidden');
     }
 }
 
+// FIX: Chuyển từ tải Song song (Promise.all) sang Tuần tự (Sequential) để tránh tràn bộ nhớ
 async function loadAllData(renderTable) {
-    const fetchers = Object.values(UI_CONFIG.SHEETS).map(name => fetchGoogleSheet(name));
-    const results = await Promise.all(fetchers);
-    
-    const [fData, pData, perData, typeData, orgData] = results;
-    
-    DATA_STORE.folders = fData;
-    DATA_STORE.profiles = pData;
-    DATA_STORE.rawPeriods = perData;
-    DATA_STORE.rawTypes = typeData;
-    DATA_STORE.rawOrgs = orgData;
-    perData.forEach(r => { if(id(r, 'period')) DATA_STORE.periods[id(r, 'period')] = r[findKey(r, 'periodname')]; });
-    typeData.forEach(r => { if(id(r, 'doctype')) DATA_STORE.types[id(r, 'doctype')] = r[findKey(r, 'doctypename')]; });
-    orgData.forEach(r => { if(id(r, 'organization')) DATA_STORE.orgs[id(r, 'organization')] = r[findKey(r, 'organizationname')]; });
-    filteredData = [...DATA_STORE.folders];
+    try {
+        // Tải từng sheet một để RAM không bị spike
+        const fData = await fetchGoogleSheet(UI_CONFIG.SHEETS.folder);
+        const pData = await fetchGoogleSheet(UI_CONFIG.SHEETS.profile);
+        const perData = await fetchGoogleSheet(UI_CONFIG.SHEETS.period);
+        const typeData = await fetchGoogleSheet(UI_CONFIG.SHEETS.doctype);
+        const orgData = await fetchGoogleSheet(UI_CONFIG.SHEETS.org);
+        
+        DATA_STORE.folders = fData;
+        DATA_STORE.profiles = pData;
+        DATA_STORE.rawPeriods = perData;
+        DATA_STORE.rawTypes = typeData;
+        DATA_STORE.rawOrgs = orgData;
 
-    if (renderTable) {
-        renderHeaderL1();
-        renderFolders();
+        perData.forEach(r => { if(id(r, 'period')) DATA_STORE.periods[id(r, 'period')] = r[findKey(r, 'periodname')]; });
+        typeData.forEach(r => { if(id(r, 'doctype')) DATA_STORE.types[id(r, 'doctype')] = r[findKey(r, 'doctypename')]; });
+        orgData.forEach(r => { if(id(r, 'organization')) DATA_STORE.orgs[id(r, 'organization')] = r[findKey(r, 'organizationname')]; });
+        
+        filteredData = [...DATA_STORE.folders];
+
+        if (renderTable) {
+            renderHeaderL1();
+            renderFolders();
+        }
+    } catch (e) {
+        throw new Error("Không thể tải dữ liệu từ Google Sheet. Vui lòng kiểm tra kết nối.");
     }
 }
 
@@ -95,10 +104,18 @@ async function fetchGoogleSheet(name) {
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
     const res = await fetch(url); const text = await res.text(); return parseCSVRobust(text);
 }
+
+// FIX: Tối ưu bộ nhớ cho hàm parse CSV
 function parseCSVRobust(text) {
-    const rows = []; const re = /"((?:""|[^"])*)"|([^,\r\n]+)|(,|\r|\n)/g;
+    const rows = []; 
+    const re = /"((?:""|[^"])*)"|([^,\r\n]+)|(,|\r|\n)/g;
     let curr = []; let m;
-    while ((m = re.exec(text + "\n"))) {
+    
+    // FIX: Gán chuỗi vào biến content một lần duy nhất. 
+    // Nếu để text + "\n" trong vòng lặp while, JS có thể tạo bản sao chuỗi liên tục gây Out Of Memory.
+    const content = text + "\n"; 
+    
+    while ((m = re.exec(content))) {
         let [full, q, u, d] = m;
         if (q !== undefined) curr.push(q.replace(/""/g, '"'));
         else if (u !== undefined) curr.push(u);
