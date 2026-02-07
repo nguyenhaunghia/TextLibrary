@@ -1,0 +1,433 @@
+const UI_CONFIG = {
+    SHEETS: { folder: 'Folder', profile: 'Profile', period: 'Period', doctype: 'DocType', org: 'Organization' },
+    L1_COLUMNS: [
+        { label: "Hồ Sơ", key: "foldername", width: "60%" },
+        { label: "Ghi Chú", key: "note", width: "40%" }
+    ],
+    L3_COLUMNS: [
+        { label: "", key: "download", width: "50px" },
+        { label: "ID Hồ sơ", key: "profileid", width: "100px" },
+        { label: "Giai Đoạn", key: "periodid", width: "150px" },
+        { label: "Loại Văn Bản", key: "doctypeid", width: "150px" },
+        { label: "Số Ký Hiệu", key: "symbolstring", width: "140px" },
+        { label: "Ngày Ban Hành", key: "promulgatedate", width: "120px" },
+        { label: "Trích Yếu Nội Dung", key: "abstract", width: "250px" },
+        { label: "Cơ Quan Ban Hành", key: "organizationid", width: "200px" },
+        { label: "Người Ký", key: "accountsigner", width: "120px" },
+        { label: "File ID", key: "fileid", width: "120px" },
+        { label: "Người cập nhật", key: "accountupdate", width: "120px" },
+        { label: "Thời điểm cập nhật", key: "timeupdate", width: "150px" }
+    ]
+};
+const SPREADSHEET_ID = '1W9UGPV9g_WmKHFsD2DRB5_aj3dHmZ_AySAyhC5xtnz0';
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyeEWVK5f00MUvGokP72eCTvhZRCMujj_fVgsArNo0WJ0CtS2i6qZ-Mm2REK9SfiJbx/exec";
+let DATA_STORE = { folders: [], profiles: [], periods: {}, types: {}, orgs: {}, rawPeriods: [], rawTypes: [], rawOrgs: [] };
+let filteredData = [];
+let expandedF = null, expandedP = null;
+let currentUser = null;
+let openDropdown = null;
+
+// Hàm khởi tạo chính - điều hướng logic dựa trên trang hiện tại
+async function bootstrap() {
+    try {
+        // Luôn check session
+        checkSession();
+
+        // Nếu là trang Index (có bảng)
+        if (document.getElementById('bodyL1')) {
+             await loadAllData(true);
+        }
+        // Nếu là trang Entry (có form upload)
+        else if (document.getElementById('profileForm')) {
+            await loadAllData(false); // Load data nhưng không render table
+            setupUploadModal();
+            // Nếu chưa login thì về login
+            if (!currentUser) {
+                showToast("Vui lòng đăng nhập!", "error");
+                setTimeout(() => window.location.href = 'login.html', 1000);
+            } else {
+                 // Hiển thị user info trên form
+                 const mh = document.getElementById('modalUserHeader'); 
+                 if(mh) {
+                    mh.style.display = 'flex';
+                    mh.querySelector('img').src = currentUser.avatar || "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+                    mh.querySelector('span').innerText = currentUser.name;
+                 }
+            }
+        }
+        // Nếu là trang Login
+        else if (document.getElementById('loginFormContent')) {
+            // Không cần load data sheet
+        }
+
+    } catch (err) {
+        console.error(err);
+        alert("Lỗi tải dữ liệu: " + err.message);
+    } finally {
+        const loader = document.getElementById('loadingScreen');
+        if (loader) loader.classList.add('hidden');
+    }
+}
+
+async function loadAllData(renderTable) {
+    const fetchers = Object.values(UI_CONFIG.SHEETS).map(name => fetchGoogleSheet(name));
+    const results = await Promise.all(fetchers);
+    
+    const [fData, pData, perData, typeData, orgData] = results;
+    
+    DATA_STORE.folders = fData;
+    DATA_STORE.profiles = pData;
+    DATA_STORE.rawPeriods = perData;
+    DATA_STORE.rawTypes = typeData;
+    DATA_STORE.rawOrgs = orgData;
+    perData.forEach(r => { if(id(r, 'period')) DATA_STORE.periods[id(r, 'period')] = r[findKey(r, 'periodname')]; });
+    typeData.forEach(r => { if(id(r, 'doctype')) DATA_STORE.types[id(r, 'doctype')] = r[findKey(r, 'doctypename')]; });
+    orgData.forEach(r => { if(id(r, 'organization')) DATA_STORE.orgs[id(r, 'organization')] = r[findKey(r, 'organizationname')]; });
+    filteredData = [...DATA_STORE.folders];
+
+    if (renderTable) {
+        renderHeaderL1();
+        renderFolders();
+    }
+}
+
+async function fetchGoogleSheet(name) {
+    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
+    const res = await fetch(url); const text = await res.text(); return parseCSVRobust(text);
+}
+function parseCSVRobust(text) {
+    const rows = []; const re = /"((?:""|[^"])*)"|([^,\r\n]+)|(,|\r|\n)/g;
+    let curr = []; let m;
+    while ((m = re.exec(text + "\n"))) {
+        let [full, q, u, d] = m;
+        if (q !== undefined) curr.push(q.replace(/""/g, '"'));
+        else if (u !== undefined) curr.push(u);
+        else if (d === ',') { if (m.index === re.lastIndex - 1) curr.push(""); }
+        else { rows.push(curr); curr = []; }
+    }
+    if (rows.length === 0) return [];
+    const headers = rows[0].map(h => h.toLowerCase().replace(/\s+/g, ''));
+    return rows.slice(1).filter(r => r.length > 0).map(row => {
+        let o = {}; headers.forEach((h, i) => o[h] = row[i] || ""); return o;
+    });
+}
+const norm = (s) => (s || "").toString().toLowerCase().replace(/\s+/g, '');
+const findKey = (obj, t) => {
+    const nt = norm(t); return Object.keys(obj).find(k => norm(k) === nt) || Object.keys(obj).find(k => norm(k).includes(nt)) || nt;
+};
+const id = (obj, type) => obj[findKey(obj, type + 'id')] || "";
+
+/* --- TABLE FUNCTIONS (INDEX) --- */
+function renderHeaderL1() {
+    const head = document.getElementById('headerL1');
+    if(!head) return;
+    let html = `<tr>`;
+    UI_CONFIG.L1_COLUMNS.forEach(c => {
+        let content = c.label;
+        if(c.key === 'foldername') {
+            content = `<div class="header-flex"><span>${c.label}</span><div class="nav-group">
+                <i class="fa-solid fa-cloud-arrow-up icon-btn upload-btn" title="Upload hồ sơ" onclick="handleUploadClick()"></i>
+                <div class="search-inline"><input type="text" id="searchInput" placeholder="Tìm kiếm nhanh...">
+                <i class="fa-solid fa-magnifying-glass" style="color:#999; font-size:12px;"></i></div></div></div>`;
+        }
+        if(c.key === 'note') {
+            content = `<div class="header-flex"><span>${c.label}</span><div class="nav-group safe-right">
+                <i class="fa-solid fa-circle-user icon-btn" id="loginBtn" onclick="openLogin()" title="Đăng nhập"></i>
+                <i class="fa-solid fa-right-from-bracket icon-btn logout-btn" id="logoutBtn" style="display:none" onclick="processLogout()" title="Đăng xuất"></i>
+                <div id="userBadge" class="user-control"><div class="user-badge"><img id="uAvatar" class="user-avatar-mini" src=""><span id="uName"></span></div></div></div></div>`;
+        }
+        html += `<th style="width:${c.width}">${content}<div class="resizer"></div></th>`;
+    });
+    head.innerHTML = html + `</tr>`;
+    attachResizers();
+    const searchInp = document.getElementById('searchInput');
+    if(searchInp) {
+        searchInp.oninput = (e) => {
+            const q = norm(e.target.value);
+            filteredData = DATA_STORE.folders.filter(f => norm(f[findKey(f, 'foldername')]).includes(q));
+            renderFolders();
+        };
+    }
+}
+function renderFolders() {
+    const body = document.getElementById('bodyL1'); if(!body) return;
+    body.innerHTML = '';
+    filteredData.forEach(f => {
+        const fid = id(f, 'folder');
+        const tr = document.createElement('tr');
+        tr.className = `row-folder ${expandedF === fid ? 'active-f' : ''}`;
+        tr.innerHTML = UI_CONFIG.L1_COLUMNS.map(c => `<td>${f[findKey(f, c.key)]}</td>`).join('');
+        tr.onclick = () => { expandedF = (expandedF === fid) ? null : fid; expandedP = null; renderFolders(); };
+        body.appendChild(tr);
+        if (expandedF === fid) {
+            const cTr = document.createElement('tr'); const td = document.createElement('td');
+            td.colSpan = UI_CONFIG.L1_COLUMNS.length; td.className = 'l2-box';
+            const fProfiles = DATA_STORE.profiles.filter(p => {
+                const folderIdsStr = id(p, 'folder') || "";
+                const folderIds = folderIdsStr.split(',').map(s => s.trim());
+                return folderIds.includes(fid);
+            });
+            const periods = [...new Set(fProfiles.map(p => id(p, 'period')))];
+            periods.forEach(pid => {
+                const pDiv = document.createElement('div'); pDiv.className = `period-item`;
+                pDiv.innerHTML = `<span class="p-title">📁 ${DATA_STORE.periods[pid] || pid}</span> <span>${expandedP === pid ? '▼' : '▶'}</span>`;
+                pDiv.onclick = (e) => { e.stopPropagation(); expandedP = (expandedP === pid) ? null : pid; renderFolders(); };
+                td.appendChild(pDiv);
+                if (expandedP === pid) {
+                    const l3c = document.createElement('div'); l3c.className = 'l3-container';
+                    let h = `<table class="table-l3"><thead><tr>`;
+                    UI_CONFIG.L3_COLUMNS.forEach(c => {
+                        const hidden = ['fileid', 'accountupdate', 'timeupdate'].includes(c.key);
+                        h += `<th style="width:${c.width}${hidden ? ';display:none' : ''}">${c.label}</th>`;
+                    });
+                    h += `</tr></thead><tbody>`;
+                    fProfiles.filter(p => id(p, 'period') === pid).forEach(prof => {
+                        h += `<tr>`;
+                        UI_CONFIG.L3_COLUMNS.forEach(c => {
+                            if(c.key === 'download') {
+                                let fileId = prof[findKey(prof, 'fileid')];
+                                if(fileId) {
+                                    let action = `window.open('https://drive.google.com/file/d/${fileId}/view', '_blank')`;
+                                    h += `<td style="text-align:center;"><i class="fa-solid fa-file-arrow-down icon-btn" onclick="${action}" title="Tải file"></i></td>`;
+                                } else h += `<td></td>`;
+                            } else {
+                                let v = prof[findKey(prof, c.key)] || "";
+                                if (c.key === 'periodid') v = DATA_STORE.periods[v] || v;
+                                if (c.key === 'doctypeid') v = DATA_STORE.types[v] || v;
+                                if (c.key === 'organizationid') v = DATA_STORE.orgs[v] || v;
+                                const hidden = ['fileid', 'accountupdate', 'timeupdate'].includes(c.key);
+                                h += `<td title="${v}" style="${hidden ? 'display:none;' : ''}">${v}</td>`;
+                            }
+                        });
+                        h += `</tr>`;
+                    });
+                    l3c.innerHTML = h + `</tbody></table>`; td.appendChild(l3c);
+                }
+            });
+            cTr.appendChild(td); body.appendChild(cTr);
+        }
+    });
+    // Re-check UI state after render
+    if(currentUser) updateUI(currentUser);
+}
+
+/* --- NAVIGATION & LOGIN --- */
+function openLogin() { window.location.href = 'login.html'; }
+function closeLogin() { window.location.href = 'index.html'; } // Trở về trang chính
+function togglePass() {
+    const p = document.getElementById('modalPass'); const i = document.getElementById('eyeIcon');
+    p.type = p.type === 'password' ? 'text' : 'password';
+    i.classList.toggle('fa-eye'); i.classList.toggle('fa-eye-slash');
+}
+async function processLogin() {
+    const u = document.getElementById('modalUser'); const p = document.getElementById('modalPass');
+    const btn = document.getElementById('btnLoginAction'); const st = document.getElementById('loginStatus');
+    if(!u.value || !p.value) { st.innerText = "Vui lòng nhập đủ thông tin"; st.style.display = 'block'; return; }
+    btn.disabled = true; btn.innerHTML = `<div class="spinner-mini"></div> ĐANG KIỂM TRA...`;
+    try {
+        const res = await fetch(WEB_APP_URL, { method: "POST", body: JSON.stringify({ action: "login", username: u.value, password: p.value }) });
+        const r = await res.json();
+        if(r.success) {
+            localStorage.setItem("userSession", JSON.stringify(r.data));
+            showToast("Đăng nhập thành công!", "success");
+            setTimeout(() => window.location.href = 'index.html', 500);
+        } else { st.innerText = r.message; st.style.display = "block"; }
+    } catch(e) { st.innerText = "Lỗi kết nối máy chủ!"; st.style.display = "block"; }
+    finally { btn.disabled = false; btn.innerHTML = "XÁC NHẬN"; }
+}
+function processLogout() {
+    localStorage.removeItem("userSession"); currentUser = null;
+    document.getElementById('loginBtn').style.display = 'block';
+    document.getElementById('logoutBtn').style.display = 'none';
+    document.getElementById('userBadge').style.display = 'none';
+    showToast("Đã đăng xuất", "info");
+}
+function checkSession() {
+    const s = localStorage.getItem("userSession"); if(s) updateUI(JSON.parse(s));
+}
+function updateUI(data) {
+    currentUser = data;
+    // Update elements if they exist (only on Index page usually)
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const userBadge = document.getElementById('userBadge');
+    
+    if(loginBtn) loginBtn.style.display = 'none';
+    if(logoutBtn) logoutBtn.style.display = 'block';
+    if(userBadge) {
+        userBadge.style.display = 'flex';
+        document.getElementById('uName').innerText = data.name;
+        document.getElementById('uAvatar').src = data.avatar || "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+    }
+}
+
+/* --- UPLOAD / ENTRY --- */
+function handleUploadClick() {
+    if(!currentUser) { showToast("Vui lòng đăng nhập!", "error"); openLogin(); }
+    else window.location.href = 'Entry.html';
+}
+function closeUploadModal() { window.location.href = 'index.html'; }
+
+function setupUploadModal() {
+    // Chỉ chạy nếu đang ở trang Entry
+    if(!document.getElementById('profileForm')) return;
+
+    // Fill các select khác
+    const fillSelect = (id, list, lblKey, valKey) => {
+        const el = document.getElementById(id); 
+        if(!el) return;
+        el.innerHTML = `<option value="">-- Chọn --</option>`;
+        list.forEach(i => {
+            const txt = i[findKey(i, lblKey)]; const val = i[findKey(i, valKey)];
+            if(txt) el.add(new Option(txt, val));
+        });
+    };
+    fillSelect('periodSelect', DATA_STORE.rawPeriods, 'periodname', 'periodid');
+    fillSelect('typeSelect', DATA_STORE.rawTypes, 'doctypename', 'doctypeid');
+    fillSelect('orgSelect', DATA_STORE.rawOrgs, 'organizationname', 'organizationid');
+    // Fill checkbox cho Folder
+    const checkboxGroup = document.getElementById('folderOptions');
+    checkboxGroup.innerHTML = '';
+    DATA_STORE.folders.forEach(folder => {
+        const folderName = folder[findKey(folder, 'foldername')];
+        const folderId = folder[findKey(folder, 'folderid')];
+        if (folderName && folderId) {
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            div.innerHTML = `<input type="checkbox" name="folderCheckbox" value="${folderId}"> <label>${folderName}</label>`;
+            checkboxGroup.appendChild(div);
+        }
+    });
+    const selectedText = document.querySelector('.selected-text');
+    function updateSelectedText() {
+        const checked = Array.from(checkboxGroup.querySelectorAll('input:checked'));
+        selectedText.innerText = checked.length > 0 ? checked.map(cb => cb.nextElementSibling.innerText).join(', ') : 'Chọn hồ sơ...';
+    }
+    checkboxGroup.addEventListener('change', () => {
+        updateSelectedText();
+        validateUploadForm();
+    });
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileStatus = document.getElementById('file-status');
+    
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault(); dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) { fileInput.files = e.dataTransfer.files; updateFileStatus(e.dataTransfer.files[0].name); }
+    });
+    fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) updateFileStatus(e.target.files[0].name); });
+    function updateFileStatus(name) {
+        fileStatus.innerText = "📁 File: " + name; fileStatus.style.color = "#0061d5"; fileStatus.style.fontWeight = "bold";
+        dropzone.classList.add('has-file'); validateUploadForm();
+    }
+    // Validate khi thay đổi checkbox hoặc các field khác
+    const reqInputs = document.querySelectorAll('.req-input');
+    reqInputs.forEach(el => {
+        el.addEventListener('input', validateUploadForm);
+        el.addEventListener('change', validateUploadForm);
+    });
+
+    // Form Submit Handler
+    document.getElementById('profileForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('btnSubmit');
+        btn.disabled = true; btn.innerText = "ĐANG LƯU...";
+        const checkedFolders = document.querySelectorAll('#folderOptions input[type="checkbox"]:checked');
+        const selectedFolderIds = Array.from(checkedFolders).map(cb => cb.value).join(',');
+        const orgId = document.getElementById('orgSelect').value || "";
+        const nnnnn = (orgId.slice(-5) || "00000").padStart(5, '0');
+        const now = new Date();
+        const dd = String(now.getDate()).padStart(2, '0');
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const yy = String(now.getFullYear()).slice(-2);
+        const fullYear = now.getFullYear();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mi = String(now.getMinutes()).padStart(2, '0');
+        const ss = String(now.getSeconds()).padStart(2, '0');
+        const xx = String(Math.floor(Math.random() * 100)).padStart(2, '0');
+        const profileId = `POR_${nnnnn}_${dd}${mm}${yy}_${hh}${mi}${ss}_${xx}`;
+        document.getElementById('u_profileId').value = profileId;
+        const timeUpdate = `${dd}/${mm}/${fullYear} ${hh}:${mi}:${ss}`;
+        document.getElementById('u_updateTime').value = timeUpdate;
+        if (currentUser && currentUser.userId) {
+            document.getElementById('u_account').value = currentUser.userId;
+        }
+        const payload = {};
+        document.querySelectorAll('#profileForm [data-col]').forEach(el => {
+            payload[el.getAttribute('data-col')] = el.value;
+        });
+        // Ghi danh sách FolderID (cách nhau dấu phẩy)
+        payload.FolderID = selectedFolderIds;
+        const fi = document.getElementById('fileInput');
+        if (fi.files.length > 0) {
+            const file = fi.files[0];
+            const extension = file.name.includes('.') ? "." + file.name.split('.').pop() : "";
+            const newFileName = profileId + extension;
+            const base64 = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.readAsDataURL(file);
+            });
+            payload.fileBase64 = base64;
+            payload.mimeType = file.type || "application/octet-stream";
+            payload.fileName = newFileName;
+        }
+        try {
+            await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify([payload]) });
+            showToast("Lưu thành công!", "success");
+            e.target.reset();
+            document.querySelectorAll('#folderOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
+            document.querySelector('.selected-text').innerText = 'Chọn hồ sơ...';
+            document.getElementById('dropzone').classList.remove('has-file');
+            document.getElementById('file-status').innerText = "Chưa có file nào";
+            // Return to index after save
+            setTimeout(() => window.location.href = 'index.html', 1500);
+        } catch (err) { showToast("Lỗi: " + err.message, "error"); }
+        finally { btn.disabled = false; btn.innerText = "LƯU HỒ SƠ"; }
+    };
+}
+
+function validateUploadForm() {
+    const checkedFolders = document.querySelectorAll('#folderOptions input[type="checkbox"]:checked');
+    const period = document.getElementById('periodSelect').value;
+    const type = document.getElementById('typeSelect').value;
+    const abstract = document.getElementById('abstractInput').value;
+    const hasFile = document.getElementById('fileInput').files.length > 0;
+    const hasFolder = checkedFolders.length > 0;
+    const btn = document.getElementById('btnSubmit');
+    if(btn) btn.disabled = !(hasFolder && period && type && abstract && hasFile);
+}
+
+/* --- UTILS --- */
+function showToast(txt, type) {
+    let color = type === "error" ? "#d93025" : (type === "info" ? "#333" : "#0061d5");
+    Toastify({ text: txt, duration: 6000, gravity: "bottom", position: "right", className: "toast-custom", style: { background: color } }).showToast();
+}
+function attachResizers() {
+    document.querySelectorAll('.resizer').forEach(r => {
+        r.onmousedown = (e) => {
+            const th = r.parentElement; const startX = e.pageX; const startW = th.offsetWidth;
+            const move = (ev) => { th.style.width = (startW + (ev.pageX - startX)) + 'px'; };
+            const stop = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', stop); };
+            document.addEventListener('mousemove', move); document.addEventListener('mouseup', stop);
+        };
+    });
+}
+function toggleDropdown(el) {
+    const container = el.nextElementSibling;
+    if (openDropdown && openDropdown !== container) {
+        openDropdown.style.display = 'none';
+    }
+    container.style.display = container.style.display === 'none' ? 'block' : 'none';
+    openDropdown = container.style.display === 'block' ? container : null;
+}
+document.addEventListener('click', (e) => {
+    if (openDropdown && !openDropdown.contains(e.target) && !e.target.closest('.select-box')) {
+        openDropdown.style.display = 'none';
+        openDropdown = null;
+    }
+});
+// Start
+bootstrap();

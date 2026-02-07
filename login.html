@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập - Hệ thống Quản lý</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="modal-overlay" style="display: flex;">
+        <div class="login-box">
+            <h3 style="text-align:center; margin-top:0;">ĐĂNG NHẬP</h3>
+            <div id="loginFormContent">
+                <input type="text" id="modalUser" placeholder="Tài khoản">
+                <div class="pass-wrapper">
+                    <input type="password" id="modalPass" placeholder="Mật khẩu">
+                    <i class="fa-solid fa-eye toggle-icon" id="eyeIcon" onclick="togglePass()"></i>
+                </div>
+                <button id="btnLoginAction" class="modal-btn" onclick="processLogin()">XÁC NHẬN</button>
+            </div>
+            <p id="loginStatus" style="color:red; font-size:12px; text-align:center; display:none; margin-bottom:0;"></p>
+            <button class="modal-btn" style="background:#999; margin-top:10px;" onclick="closeLogin()">HỦY</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nhập Hồ Sơ Mới</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="loadingScreen" class="loader">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px;">Đang tải dữ liệu...</p>
+    </div>
+
+    <div class="modal-overlay" style="display: flex;">
+        <div class="u-container">
+            <div class="u-header">
+                <h2>Phiếu Nhập Hồ Sơ Văn Bản</h2>
+                <div id="modalUserHeader" class="u-user-info" style="display:none;">
+                    <img src="" alt="">
+                    <span></span>
+                </div>
+            </div>
+            <form id="profileForm">
+                <input type="hidden" data-col="ProfileID" id="u_profileId">
+                <input type="hidden" data-col="TimeUpdate" id="u_updateTime">
+                <input type="hidden" data-col="AccountUpdate" id="u_account">
+                <div class="grid-row">
+                    <div class="form-group">
+                        <label>Hồ sơ (Folder) * (có thể chọn nhiều)</label>
+                        <div class="multi-select req-input">
+                            <div class="select-box" onclick="toggleDropdown(this)">
+                                <span class="selected-text">Chọn hồ sơ...</span>
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </div>
+                            <div id="folderOptions" class="options-container"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Giai đoạn *</label>
+                        <select id="periodSelect" class="req-input" data-col="PeriodID" required></select>
+                    </div>
+                </div>
+                <div class="grid-row" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <div class="form-group">
+                        <label>Loại văn bản *</label>
+                        <select id="typeSelect" class="req-input" data-col="DocTypeID" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Số ký hiệu</label>
+                        <input type="text" data-col="SymbolString" placeholder="VD: 01/QĐ-UB">
+                    </div>
+                    <div class="form-group">
+                        <label>Ngày ban hành</label>
+                        <input type="date" data-col="PromulgateDate">
+                    </div>
+                </div>
+                <div class="grid-row">
+                    <div class="form-group">
+                        <label>Cơ quan ban hành</label>
+                        <select id="orgSelect" data-col="OrganizationID"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Người ký</label>
+                        <input type="text" data-col="AccountSigner">
+                    </div>
+                </div>
+                <div class="content-file-row">
+                    <div class="form-group">
+                        <label>Trích yếu nội dung *</label>
+                        <textarea id="abstractInput" data-col="Abstract" class="textarea-box req-input" placeholder="Nhập tóm tắt văn bản..." required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Đính kèm file *</label>
+                        <div class="upload-container" id="dropzone">
+                            <i class="fa-solid fa-cloud-arrow-up" style="font-size: 28px; color: var(--primary-color); margin-bottom:5px;"></i>
+                            <span style="font-size: 12px; color: var(--primary-color); font-weight: bold;">KÉO THẢ FILE VÀO ĐÂY</span>
+                            <div class="upload-actions">
+                                <button type="button" class="btn-mini" onclick="document.getElementById('fileInput').click()">CHỌN TỪ MÁY</button>
+                                <button type="button" class="btn-mini" onclick="window.open('https://drive.google.com/drive/u/0/my-drive', '_blank')">GOOGLE DRIVE</button>
+                            </div>
+                            <div id="file-status" style="margin-top:8px; font-size:12px; color:#555;">Chưa có file nào</div>
+                            <input type="file" id="fileInput" class="req-input" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+                <div class="footer-row">
+                    <label>Ghi chú:</label>
+                    <input type="text" data-col="Note" placeholder="Thông tin bổ sung...">
+                    <div class="btn-main-box">
+                        <button type="button" class="btn-reset" onclick="closeUploadModal()">ĐÓNG</button>
+                        <button type="submit" class="btn-save" id="btnSubmit" disabled>LƯU HỒ SƠ</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
