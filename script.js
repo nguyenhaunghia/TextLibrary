@@ -338,7 +338,7 @@ function updateUI(data) {
 /* --- UPLOAD / ENTRY --- */
 function handleUploadClick() {
     if(!currentUser) { showToast("Vui lòng đăng nhập!", "error"); openLogin(); }
-    else window.location.href = 'Entry.html';
+    else window.location.href = 'entry.html';
 }
 function closeUploadModal() { window.location.href = 'index.html'; }
 
@@ -497,3 +497,4 @@ document.addEventListener('click', (e) => {
     }
 });
 bootstrap();
+
