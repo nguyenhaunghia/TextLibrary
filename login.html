@@ -7,25 +7,116 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <link rel="stylesheet" href="style.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        /* CSS trang trí phần Google Login chuẩn tone Aqua Pastel */
+        .separator-container { display: flex; align-items: center; margin: 20px 0; color: #a4b5c4; }
+        .separator-line { flex: 1; height: 1px; background-color: #d1e5eb; }
+        .separator-text { padding: 0 15px; font-size: 13px; font-weight: 700; color: #788a9f; text-transform: uppercase; letter-spacing: 1px; }
+        .google-btn-wrapper {
+            display: flex; justify-content: center;
+            background: #f8fcfd; padding: 10px; border-radius: var(--rad-sm, 12px);
+            border: 1px dashed #bce2ed; transition: all 0.3s; margin-bottom: 10px;
+        }
+        .google-btn-wrapper:hover { background: #e0f4f9; border-color: var(--primary-color, #4facfe); transform: translateY(-2px); box-shadow: 0 4px 10px rgba(79, 172, 254, 0.15); }
+    </style>
 </head>
 <body>
     <div class="modal-overlay" style="display: flex;">
         <div class="login-box">
-            <h3 style="text-align:center; margin-top:0;">ĐĂNG NHẬP</h3>
-            <div id="loginFormContent">
-                <input type="text" id="modalUser" placeholder="Tài khoản">
+            <h3 style="text-align:center; margin-top:0; color: var(--primary-color);">ĐĂNG NHẬP</h3>
+            
+            <form id="loginFormContent" onsubmit="event.preventDefault(); processLogin();">
+                <input type="text" id="modalUser" placeholder="Tài khoản" required>
                 <div class="pass-wrapper">
-                    <input type="password" id="modalPass" placeholder="Mật khẩu">
+                    <input type="password" id="modalPass" placeholder="Mật khẩu" required>
                     <i class="fa-solid fa-eye toggle-icon" id="eyeIcon" onclick="togglePass()"></i>
                 </div>
-                <button id="btnLoginAction" class="modal-btn" onclick="processLogin()">XÁC NHẬN</button>
+                <button type="submit" id="btnLoginAction" class="modal-btn">XÁC NHẬN</button>
+            </form>
+
+            <div class="separator-container">
+                <div class="separator-line"></div>
+                <div class="separator-text">Hoặc</div>
+                <div class="separator-line"></div>
             </div>
-            <p id="loginStatus" style="color:red; font-size:12px; text-align:center; display:none; margin-bottom:0;"></p>
-            <button class="modal-btn" style="background:#999; margin-top:10px;" onclick="closeLogin()">HỦY</button>
+
+            <div class="google-btn-wrapper">
+                <div id="g_id_onload"
+                     data-client_id="580359285280-slv8aodii2mjp8dpqas9kui5nud3m0kd.apps.googleusercontent.com"
+                     data-callback="handleCredentialResponse"
+                     data-auto_prompt="false">
+                </div>
+                <div class="g_id_signin"
+                     data-type="standard"
+                     data-size="large"
+                     data-theme="outline"
+                     data-text="sign_in_with"
+                     data-shape="rectangular"
+                     data-logo_alignment="left"
+                     data-width="260">
+                </div>
+            </div>
+
+            <p id="loginStatus" style="color:#ff9a9e; font-size:13px; font-weight:600; text-align:center; display:none; margin-bottom:0; margin-top: 10px;"></p>
+            <button class="btn-reset" style="width: 100%; margin-top:15px;" onclick="closeLogin()">HỦY & QUAY LẠI</button>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="script.js"></script>
+
+    <script>
+        // Hàm giải mã Token từ Google (Không cần thư viện ngoài)
+        function decodeJwtResponse(token) {
+            let base64Url = token.split('.')[1];
+            let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            let jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        }
+
+        // Hàm Callback khi người dùng click Đăng nhập Google thành công
+        async function handleCredentialResponse(response) {
+            const payload = decodeJwtResponse(response.credential);
+            const btn = document.getElementById('btnLoginAction');
+            const st = document.getElementById('loginStatus');
+            
+            // Khóa nút và hiển thị trạng thái tải
+            btn.disabled = true;
+            btn.innerHTML = `<div class="spinner-mini"></div> ĐANG XÁC THỰC...`;
+            st.style.display = "none";
+
+            try {
+                // WEB_APP_URL lấy từ biến toàn cục trong script.js
+                const res = await fetch(WEB_APP_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "google_login",
+                        email: payload.email,
+                        name: payload.name,
+                        avatar: payload.picture
+                    })
+                });
+                const r = await res.json();
+
+                if (r.success) {
+                    localStorage.setItem("userSession", JSON.stringify(r.data));
+                    showToast("Đăng nhập Google thành công!", "success");
+                    setTimeout(() => window.location.href = 'index.html', 500);
+                } else {
+                    st.innerText = r.message || "Tài khoản chưa được cấp quyền!";
+                    st.style.display = "block";
+                }
+            } catch (e) {
+                st.innerText = "Lỗi kết nối máy chủ!";
+                st.style.display = "block";
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "XÁC NHẬN";
+            }
+        }
+    </script>
 </body>
 </html>

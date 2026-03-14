@@ -1,3 +1,4 @@
+
 const UI_CONFIG = {
     SHEETS: { folder: 'Folder', profile: 'Profile', period: 'Period', doctype: 'DocType', org: 'Organization' },
     L1_COLUMNS: [
@@ -6,46 +7,49 @@ const UI_CONFIG = {
     ],
     L3_COLUMNS: [
         { label: "", key: "download", width: "50px" },
-        { label: "ID Hồ sơ", key: "profileid", width: "100px" },
-        { label: "Giai Đoạn", key: "periodid", width: "150px" },
-        { label: "Loại Văn Bản", key: "doctypeid", width: "150px" },
-        { label: "Số Ký Hiệu", key: "symbolstring", width: "140px" },
+        { label: "Số Ký Hiệu", key: "symbolstring", width: "130px" },
         { label: "Ngày Ban Hành", key: "promulgatedate", width: "120px" },
         { label: "Trích Yếu Nội Dung", key: "abstract", width: "250px" },
-        { label: "Cơ Quan Ban Hành", key: "organizationid", width: "200px" },
+        { label: "Cơ Quan Ban Hành", key: "organizationid", width: "180px" },
+        { label: "ID Hồ sơ", key: "profileid", width: "120px" },
+        { label: "Loại Văn Bản", key: "doctypeid", width: "130px" },
         { label: "Người Ký", key: "accountsigner", width: "120px" },
+        // 💧 Giữ lại Giai Đoạn và các cột hệ thống để bảo toàn dữ liệu 100%
+        { label: "Giai Đoạn", key: "periodid", width: "130px" },
         { label: "File ID", key: "fileid", width: "120px" },
         { label: "Người cập nhật", key: "accountupdate", width: "120px" },
         { label: "Thời điểm cập nhật", key: "timeupdate", width: "150px" }
     ]
 };
+
 const SPREADSHEET_ID = '1W9UGPV9g_WmKHFsD2DRB5_aj3dHmZ_AySAyhC5xtnz0';
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyeEWVK5f00MUvGokP72eCTvhZRCMujj_fVgsArNo0WJ0CtS2i6qZ-Mm2REK9SfiJbx/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyuAwbP5lQhy5ENFz1KdYNG1iRfx9K6AjP0sVx0TMbjTuDoWlLuKbPvBYWDq40dS_6G/exec";
+
 let DATA_STORE = { folders: [], profiles: [], periods: {}, types: {}, orgs: {}, rawPeriods: [], rawTypes: [], rawOrgs: [] };
 let filteredData = [];
 let expandedF = null, expandedP = null;
 let currentUser = null;
 let openDropdown = null;
 
+// ✨ DRY Helper: Rút gọn gọi DOM
+const el = (id) => document.getElementById(id);
+
 async function bootstrap() {
     try {
         checkSession();
         // IS INDEX PAGE
-        if (document.getElementById('bodyL1')) {
-             // Index cần tải tất cả dữ liệu
+        if (el('bodyL1')) {
              await loadAllData(true, false); 
         }
         // IS ENTRY PAGE
-        else if (document.getElementById('profileForm')) {
-            // OPTIMIZATION: Trang Entry KHÔNG tải Sheet Profile (Sheet nặng nhất) vì không dùng đến.
-            // Tham số thứ 2 là skipProfiles = true
+        else if (el('profileForm')) {
             await loadAllData(false, true); 
             setupUploadModal();
             if (!currentUser) {
                 showToast("Vui lòng đăng nhập!", "error");
                 setTimeout(() => window.location.href = 'login.html', 1000);
             } else {
-                 const mh = document.getElementById('modalUserHeader'); 
+                 const mh = el('modalUserHeader'); 
                  if(mh) {
                     mh.style.display = 'flex';
                     mh.querySelector('img').src = currentUser.avatar || "https://cdn-icons-png.flaticon.com/512/149/149071.png";
@@ -57,15 +61,13 @@ async function bootstrap() {
         console.error(err);
         alert("Lỗi tải dữ liệu: " + err.message);
     } finally {
-        const loader = document.getElementById('loadingScreen');
+        const loader = el('loadingScreen');
         if (loader) loader.classList.add('hidden');
     }
 }
 
-// Hàm tải dữ liệu có cờ 'skipProfiles' để giảm tải cho trang Entry
 async function loadAllData(renderTable, skipProfiles) {
     try {
-        // 1. Tải các bảng nhỏ (Metadata) trước
         const perData = await fetchGoogleSheet(UI_CONFIG.SHEETS.period);
         const typeData = await fetchGoogleSheet(UI_CONFIG.SHEETS.doctype);
         const orgData = await fetchGoogleSheet(UI_CONFIG.SHEETS.org);
@@ -78,12 +80,10 @@ async function loadAllData(renderTable, skipProfiles) {
         typeData.forEach(r => { if(id(r, 'doctype')) DATA_STORE.types[id(r, 'doctype')] = r[findKey(r, 'doctypename')]; });
         orgData.forEach(r => { if(id(r, 'organization')) DATA_STORE.orgs[id(r, 'organization')] = r[findKey(r, 'organizationname')]; });
 
-        // 2. Tải danh sách Folder
         const fData = await fetchGoogleSheet(UI_CONFIG.SHEETS.folder);
         DATA_STORE.folders = fData;
         filteredData = [...DATA_STORE.folders];
 
-        // 3. Chỉ tải Profile nếu KHÔNG bị skip (Trang Index cần, Trang Entry không cần)
         if (!skipProfiles) {
             const pData = await fetchGoogleSheet(UI_CONFIG.SHEETS.profile);
             DATA_STORE.profiles = pData;
@@ -98,31 +98,38 @@ async function loadAllData(renderTable, skipProfiles) {
     }
 }
 
+
 async function fetchGoogleSheet(name) {
-    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
+    // 🍬 Thay vì gọi trực tiếp docs.google.com (bị chặn nếu file Private)
+    // Chúng ta gọi qua WEB_APP_URL (đã được cấp quyền bởi nguyenhaunghia@gmail.com)
+    const url = `${WEB_APP_URL}?sheet=${encodeURIComponent(name)}`;
+    
     const res = await fetch(url); 
     const text = await res.text(); 
-    return parseCSVFasLight(text); // Sử dụng hàm parse mới
+    
+    // Vẫn dùng parser xịn xò cũ của bạn để xử lý chuỗi CSV
+    return parseCSVFasLight(text); 
 }
 
-// --- OPTIMIZED PARSER: STATE MACHINE (NO REGEX) ---
-// Hàm này chạy nhanh gấp 10 lần và tiết kiệm 90% RAM so với bản cũ
+
+
+
+// --- OPTIMIZED PARSER: STATE MACHINE ---
 function parseCSVFasLight(text) {
     const rows = [];
     let row = [];
     let curVal = '';
     let inQuote = false;
     
-    // Duyệt qua từng ký tự - O(n) complexity, cực nhẹ cho iPad
     for (let i = 0; i < text.length; i++) {
         const c = text[i];
         const next = text[i+1];
 
         if (inQuote) {
-            if (c === '"' && next === '"') { // 2 dấu nháy kép -> 1 dấu nháy
+            if (c === '"' && next === '"') { 
                 curVal += '"';
                 i++;
-            } else if (c === '"') { // Kết thúc quote
+            } else if (c === '"') {
                 inQuote = false;
             } else {
                 curVal += c;
@@ -138,14 +145,12 @@ function parseCSVFasLight(text) {
                 if (row.length > 0) rows.push(row);
                 row = [];
                 curVal = '';
-                // Skip \n if we just hit \r
                 if (c === '\r' && next === '\n') i++;
             } else {
                 curVal += c;
             }
         }
     }
-    // Push dòng cuối nếu không có xuống dòng ở cuối file
     if (curVal || row.length > 0) {
         row.push(curVal);
         rows.push(row);
@@ -153,12 +158,11 @@ function parseCSVFasLight(text) {
 
     if (rows.length === 0) return [];
     
-    // Map headers
-    const headers = rows[0].map(h => h.toLowerCase().replace(/\s+/g, ''));
+    // ✨ FIX: Xóa ký tự BOM ẩn (^\uFEFF) giúp bảo toàn Key Object
+    const headers = rows[0].map(h => h.replace(/^\uFEFF/, '').toLowerCase().replace(/\s+/g, ''));
     const result = [];
     for(let i = 1; i < rows.length; i++) {
         const r = rows[i];
-        // Chỉ map nếu dòng có dữ liệu
         if (r.length > 0 && (r.length > 1 || r[0] !== '')) {
             let o = {};
             for(let j = 0; j < headers.length; j++) {
@@ -178,7 +182,7 @@ const id = (obj, type) => obj[findKey(obj, type + 'id')] || "";
 
 /* --- TABLE FUNCTIONS (INDEX) --- */
 function renderHeaderL1() {
-    const head = document.getElementById('headerL1');
+    const head = el('headerL1');
     if(!head) return;
     let html = `<tr>`;
     UI_CONFIG.L1_COLUMNS.forEach(c => {
@@ -199,7 +203,7 @@ function renderHeaderL1() {
     });
     head.innerHTML = html + `</tr>`;
     attachResizers();
-    const searchInp = document.getElementById('searchInput');
+    const searchInp = el('searchInput');
     if(searchInp) {
         searchInp.oninput = (e) => {
             const q = norm(e.target.value);
@@ -208,12 +212,15 @@ function renderHeaderL1() {
         };
     }
 }
+
 function renderFolders() {
-    const body = document.getElementById('bodyL1'); if(!body) return;
+    const body = el('bodyL1'); if(!body) return;
     body.innerHTML = '';
     
-    // Virtualization đơn giản: Nếu data quá lớn, chỉ render 100 folder đầu để UI không đơ
     const displayList = filteredData.length > 200 && !expandedF ? filteredData.slice(0, 100) : filteredData;
+
+    // ✨ CHỐNG TRÀN BỘ NHỚ: Sử dụng DocumentFragment để in 1 lần duy nhất thay vì in lặp lại 100 lần
+    const fragment = document.createDocumentFragment();
 
     displayList.forEach(f => {
         const fid = id(f, 'folder');
@@ -221,12 +228,13 @@ function renderFolders() {
         tr.className = `row-folder ${expandedF === fid ? 'active-f' : ''}`;
         tr.innerHTML = UI_CONFIG.L1_COLUMNS.map(c => `<td>${f[findKey(f, c.key)]}</td>`).join('');
         tr.onclick = () => { expandedF = (expandedF === fid) ? null : fid; expandedP = null; renderFolders(); };
-        body.appendChild(tr);
+        
+        fragment.appendChild(tr);
+
         if (expandedF === fid) {
             const cTr = document.createElement('tr'); const td = document.createElement('td');
             td.colSpan = UI_CONFIG.L1_COLUMNS.length; td.className = 'l2-box';
             
-            // Logic lọc profile vẫn giữ nguyên
             const fProfiles = DATA_STORE.profiles ? DATA_STORE.profiles.filter(p => {
                 const folderIdsStr = id(p, 'folder') || "";
                 return folderIdsStr.includes(fid);
@@ -273,16 +281,17 @@ function renderFolders() {
                     }
                 });
             }
-            cTr.appendChild(td); body.appendChild(cTr);
+            cTr.appendChild(td); fragment.appendChild(cTr);
         }
     });
     
-    // Nếu danh sách bị cắt bớt do quá dài
     if (filteredData.length > displayList.length) {
          const trInfo = document.createElement('tr');
          trInfo.innerHTML = `<td colspan="2" style="text-align:center; padding:10px; color:#888;">...Còn ${filteredData.length - displayList.length} hồ sơ nữa. Dùng tìm kiếm để lọc...</td>`;
-         body.appendChild(trInfo);
+         fragment.appendChild(trInfo);
     }
+
+    body.appendChild(fragment); // Render lên màn hình 1 lần duy nhất
 
     if(currentUser) updateUI(currentUser);
 }
@@ -291,13 +300,13 @@ function renderFolders() {
 function openLogin() { window.location.href = 'login.html'; }
 function closeLogin() { window.location.href = 'index.html'; }
 function togglePass() {
-    const p = document.getElementById('modalPass'); const i = document.getElementById('eyeIcon');
+    const p = el('modalPass'); const i = el('eyeIcon');
     p.type = p.type === 'password' ? 'text' : 'password';
     i.classList.toggle('fa-eye'); i.classList.toggle('fa-eye-slash');
 }
 async function processLogin() {
-    const u = document.getElementById('modalUser'); const p = document.getElementById('modalPass');
-    const btn = document.getElementById('btnLoginAction'); const st = document.getElementById('loginStatus');
+    const u = el('modalUser'); const p = el('modalPass');
+    const btn = el('btnLoginAction'); const st = el('loginStatus');
     if(!u.value || !p.value) { st.innerText = "Vui lòng nhập đủ thông tin"; st.style.display = 'block'; return; }
     btn.disabled = true; btn.innerHTML = `<div class="spinner-mini"></div> ĐANG KIỂM TRA...`;
     try {
@@ -313,9 +322,9 @@ async function processLogin() {
 }
 function processLogout() {
     localStorage.removeItem("userSession"); currentUser = null;
-    document.getElementById('loginBtn').style.display = 'block';
-    document.getElementById('logoutBtn').style.display = 'none';
-    document.getElementById('userBadge').style.display = 'none';
+    el('loginBtn').style.display = 'block';
+    el('logoutBtn').style.display = 'none';
+    el('userBadge').style.display = 'none';
     showToast("Đã đăng xuất", "info");
 }
 function checkSession() {
@@ -323,15 +332,15 @@ function checkSession() {
 }
 function updateUI(data) {
     currentUser = data;
-    const loginBtn = document.getElementById('loginBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const userBadge = document.getElementById('userBadge');
+    const loginBtn = el('loginBtn');
+    const logoutBtn = el('logoutBtn');
+    const userBadge = el('userBadge');
     if(loginBtn) loginBtn.style.display = 'none';
     if(logoutBtn) logoutBtn.style.display = 'block';
     if(userBadge) {
         userBadge.style.display = 'flex';
-        document.getElementById('uName').innerText = data.name;
-        document.getElementById('uAvatar').src = data.avatar || "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+        el('uName').innerText = data.name;
+        el('uAvatar').src = data.avatar || "https://cdn-icons-png.flaticon.com/512/149/149071.png";
     }
 }
 
@@ -343,22 +352,22 @@ function handleUploadClick() {
 function closeUploadModal() { window.location.href = 'index.html'; }
 
 function setupUploadModal() {
-    if(!document.getElementById('profileForm')) return;
+    if(!el('profileForm')) return;
 
     const fillSelect = (id, list, lblKey, valKey) => {
-        const el = document.getElementById(id); 
-        if(!el) return;
-        el.innerHTML = `<option value="">-- Chọn --</option>`;
+        const d_el = el(id); 
+        if(!d_el) return;
+        d_el.innerHTML = `<option value="">-- Chọn --</option>`;
         list.forEach(i => {
             const txt = i[findKey(i, lblKey)]; const val = i[findKey(i, valKey)];
-            if(txt) el.add(new Option(txt, val));
+            if(txt) d_el.add(new Option(txt, val));
         });
     };
     fillSelect('periodSelect', DATA_STORE.rawPeriods, 'periodname', 'periodid');
     fillSelect('typeSelect', DATA_STORE.rawTypes, 'doctypename', 'doctypeid');
     fillSelect('orgSelect', DATA_STORE.rawOrgs, 'organizationname', 'organizationid');
 
-    const checkboxGroup = document.getElementById('folderOptions');
+    const checkboxGroup = el('folderOptions');
     checkboxGroup.innerHTML = '';
     DATA_STORE.folders.forEach(folder => {
         const folderName = folder[findKey(folder, 'foldername')];
@@ -379,9 +388,10 @@ function setupUploadModal() {
         updateSelectedText();
         validateUploadForm();
     });
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('fileInput');
-    const fileStatus = document.getElementById('file-status');
+    
+    const dropzone = el('dropzone');
+    const fileInput = el('fileInput');
+    const fileStatus = el('file-status');
     
     dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
@@ -395,41 +405,43 @@ function setupUploadModal() {
         dropzone.classList.add('has-file'); validateUploadForm();
     }
     const reqInputs = document.querySelectorAll('.req-input');
-    reqInputs.forEach(el => {
-        el.addEventListener('input', validateUploadForm);
-        el.addEventListener('change', validateUploadForm);
+    reqInputs.forEach(input_el => {
+        input_el.addEventListener('input', validateUploadForm);
+        input_el.addEventListener('change', validateUploadForm);
     });
 
-    document.getElementById('profileForm').onsubmit = async (e) => {
+    el('profileForm').onsubmit = async (e) => {
         e.preventDefault();
-        const btn = document.getElementById('btnSubmit');
+        const btn = el('btnSubmit');
         btn.disabled = true; btn.innerText = "ĐANG LƯU...";
+        
         const checkedFolders = document.querySelectorAll('#folderOptions input[type="checkbox"]:checked');
         const selectedFolderIds = Array.from(checkedFolders).map(cb => cb.value).join(',');
-        const orgId = document.getElementById('orgSelect').value || "";
+        const orgId = el('orgSelect').value || "";
         const nnnnn = (orgId.slice(-5) || "00000").padStart(5, '0');
         const now = new Date();
-        const dd = String(now.getDate()).padStart(2, '0');
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const yy = String(now.getFullYear()).slice(-2);
-        const fullYear = now.getFullYear();
-        const hh = String(now.getHours()).padStart(2, '0');
-        const mi = String(now.getMinutes()).padStart(2, '0');
-        const ss = String(now.getSeconds()).padStart(2, '0');
-        const xx = String(Math.floor(Math.random() * 100)).padStart(2, '0');
+        
+        // ✨ DRY: Gộp hàm format chuỗi thời gian
+        const pad = (num) => String(num).padStart(2, '0');
+        const dd = pad(now.getDate()), mm = pad(now.getMonth() + 1), yy = String(now.getFullYear()).slice(-2);
+        const hh = pad(now.getHours()), mi = pad(now.getMinutes()), ss = pad(now.getSeconds());
+        const xx = pad(Math.floor(Math.random() * 100));
+        
         const profileId = `POR_${nnnnn}_${dd}${mm}${yy}_${hh}${mi}${ss}_${xx}`;
-        document.getElementById('u_profileId').value = profileId;
-        const timeUpdate = `${dd}/${mm}/${fullYear} ${hh}:${mi}:${ss}`;
-        document.getElementById('u_updateTime').value = timeUpdate;
+        el('u_profileId').value = profileId;
+        el('u_updateTime').value = `${dd}/${mm}/${now.getFullYear()} ${hh}:${mi}:${ss}`;
+        
         if (currentUser && currentUser.userId) {
-            document.getElementById('u_account').value = currentUser.userId;
+            el('u_account').value = currentUser.userId;
         }
+        
         const payload = {};
-        document.querySelectorAll('#profileForm [data-col]').forEach(el => {
-            payload[el.getAttribute('data-col')] = el.value;
+        document.querySelectorAll('#profileForm [data-col]').forEach(dom_el => {
+            payload[dom_el.getAttribute('data-col')] = dom_el.value;
         });
         payload.FolderID = selectedFolderIds;
-        const fi = document.getElementById('fileInput');
+        
+        const fi = el('fileInput');
         if (fi.files.length > 0) {
             const file = fi.files[0];
             const extension = file.name.includes('.') ? "." + file.name.split('.').pop() : "";
@@ -444,27 +456,40 @@ function setupUploadModal() {
             payload.fileName = newFileName;
         }
         try {
-            await fetch(WEB_APP_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify([payload]) });
-            showToast("Lưu thành công!", "success");
-            e.target.reset();
-            document.querySelectorAll('#folderOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
-            document.querySelector('.selected-text').innerText = 'Chọn hồ sơ...';
-            document.getElementById('dropzone').classList.remove('has-file');
-            document.getElementById('file-status').innerText = "Chưa có file nào";
-            setTimeout(() => window.location.href = 'index.html', 1500);
-        } catch (err) { showToast("Lỗi: " + err.message, "error"); }
-        finally { btn.disabled = false; btn.innerText = "LƯU HỒ SƠ"; }
+            // ✨ FIX: Bỏ mode: 'no-cors' và xử lý json để lấy lỗi thực tế từ server
+            const response = await fetch(WEB_APP_URL, { 
+                method: 'POST', 
+                body: JSON.stringify([payload]) 
+            });
+            const result = await response.json();
+            
+            if(result.success) {
+                showToast("Lưu thành công!", "success");
+                e.target.reset();
+                document.querySelectorAll('#folderOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
+                document.querySelector('.selected-text').innerText = 'Chọn hồ sơ...';
+                el('dropzone').classList.remove('has-file');
+                el('file-status').innerText = "Chưa có file nào";
+                setTimeout(() => window.location.href = 'index.html', 1500);
+            } else {
+                throw new Error(result.message || "Lưu thất bại từ máy chủ.");
+            }
+        } catch (err) { 
+            showToast("Lỗi: " + err.message, "error"); 
+        } finally { 
+            btn.disabled = false; btn.innerText = "LƯU HỒ SƠ"; 
+        }
     };
 }
 
 function validateUploadForm() {
     const checkedFolders = document.querySelectorAll('#folderOptions input[type="checkbox"]:checked');
-    const period = document.getElementById('periodSelect').value;
-    const type = document.getElementById('typeSelect').value;
-    const abstract = document.getElementById('abstractInput').value;
-    const hasFile = document.getElementById('fileInput').files.length > 0;
+    const period = el('periodSelect').value;
+    const type = el('typeSelect').value;
+    const abstract = el('abstractInput').value;
+    const hasFile = el('fileInput').files.length > 0;
     const hasFolder = checkedFolders.length > 0;
-    const btn = document.getElementById('btnSubmit');
+    const btn = el('btnSubmit');
     if(btn) btn.disabled = !(hasFolder && period && type && abstract && hasFile);
 }
 
@@ -482,8 +507,8 @@ function attachResizers() {
         };
     });
 }
-function toggleDropdown(el) {
-    const container = el.nextElementSibling;
+function toggleDropdown(dom_el) {
+    const container = dom_el.nextElementSibling;
     if (openDropdown && openDropdown !== container) {
         openDropdown.style.display = 'none';
     }
@@ -497,4 +522,3 @@ document.addEventListener('click', (e) => {
     }
 });
 bootstrap();
-
