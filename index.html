@@ -17,9 +17,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
     <div id="loadingScreen" class="loader">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 600; color: var(--text-main); letter-spacing: 0.5px;">Đang tải dữ liệu...</p>
+        <p style="margin-top: 15px; font-weight: 600; color: var(--text-main); letter-spacing: 0.5px;">
+            Đang tải dữ liệu... <span id="loadPercent" style="color: var(--primary-color); font-weight: 800; margin-left: 5px;">0%</span>
+        </p>
     </div>
 
     <div class="main-wrapper">
@@ -28,6 +31,9 @@
             <tbody id="bodyL1"></tbody>
         </table>
     </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/toastify-js" defer></script>
     <script src="script.js" defer></script>
