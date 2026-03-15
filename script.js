@@ -116,7 +116,7 @@ const UI_CONFIG = {
 };
 
 const SPREADSHEET_ID = '1W9UGPV9g_WmKHFsD2DRB5_aj3dHmZ_AySAyhC5xtnz0';
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzXpBQUWRQYTbOatyNc-EPmRVFpy7crEn-YSGnABkPQAH7HR4sFOZ_j7yHP_4ntieA/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbykMnW0F1lS06N7-csmuuzMtz1_rKT0zASJixB6DbkookoGWvjBfr8kM9cjU6chWX7G/exec";
 
 let DATA_STORE = { folders: [], profiles: [], periods: {}, types: {}, orgs: {}, rawPeriods: [], rawTypes: [], rawOrgs: [] };
 let filteredData = [];

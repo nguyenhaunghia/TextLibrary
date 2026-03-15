@@ -5,19 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đăng nhập - Hệ thống Quản lý</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <link rel="stylesheet" href="style.css">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         /* ✨ CSS trang trí Modal Google Login chuẩn tone Aqua Pastel Tối giản ✨ */
         .login-box {
             display: flex; flex-direction: column; align-items: center;
-            padding: 45px 35px; /* Tăng không gian thở cho form */
-            border-radius: 20px; /* Bo góc mềm mại kẹo ngọt */
-            box-shadow: 0 15px 35px rgba(2, 62, 138, 0.08); /* Đổ bóng nhẹ nhàng */
-            width: 340px; /* Cố định chiều rộng vừa vặn */
-            background: #ffffff;
-            box-sizing: border-box;
+            padding: 45px 35px; border-radius: 20px; 
+            box-shadow: 0 15px 35px rgba(2, 62, 138, 0.08); 
+            width: 340px; background: #ffffff; box-sizing: border-box;
         }
         .login-box h3 {
             margin-top: 0; margin-bottom: 15px; 
@@ -27,22 +23,15 @@
             color: #64748b; font-size: 14px; margin-bottom: 35px; 
             text-align: center; line-height: 1.6; font-weight: 500;
         }
-        
-        /* Chứa nút Google (Đã gỡ bỏ viền đứt nét theo yêu cầu) */
-        .google-btn-container {
-            display: flex; justify-content: center; width: 100%; margin-bottom: 15px;
-        }
+        .google-btn-container { display: flex; justify-content: center; width: 100%; margin-bottom: 15px; }
 
-        /* Nút Hủy nhẹ nhàng, thanh thoát */
         .btn-reset-pastel { 
-            width: 100%; margin-top: 10px; 
-            background: #f1f5f9; color: #64748b; border: none; 
+            width: 100%; margin-top: 10px; background: #f1f5f9; color: #64748b; border: none; 
             padding: 12px 20px; border-radius: 12px; font-weight: 700; 
             cursor: pointer; font-size: 13px; transition: all 0.3s ease; 
         }
         .btn-reset-pastel:hover { background: #e2e8f0; color: #475569; transform: translateY(-1px); }
         
-        /* Trạng thái Loading cho Google Login */
         #googleLoginStatus {
             color: var(--text-main); font-size: 13px; font-weight: 600; text-align: center; 
             display: none; margin-top: 15px; padding: 12px; border-radius: 12px;
@@ -64,13 +53,9 @@
                      data-auto_prompt="false">
                 </div>
                 <div class="g_id_signin"
-                     data-type="standard"
-                     data-size="large"
-                     data-theme="outline"
-                     data-text="sign_in_with"
-                     data-shape="rectangular"
-                     data-logo_alignment="center"
-                     data-width="260">
+                     data-type="standard" data-size="large" data-theme="outline"
+                     data-text="sign_in_with" data-shape="rectangular"
+                     data-logo_alignment="center" data-width="260">
                 </div>
             </div>
 
@@ -83,7 +68,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="script.js"></script>
 
     <script>
@@ -101,7 +85,6 @@
             const statusBox = document.getElementById('googleLoginStatus');
             const googleBtn = document.querySelector('.g_id_signin');
             
-            // Hiển thị trạng thái đang tải, ẩn nút Google tạm thời
             statusBox.className = ''; 
             statusBox.innerHTML = `<div class="spinner-mini" style="border-top-color: var(--primary-color);"></div> Đang xác thực tài khoản...`;
             statusBox.style.display = "block";
@@ -109,7 +92,6 @@
             googleBtn.style.pointerEvents = "none";
 
             try {
-                // WEB_APP_URL lấy từ biến toàn cục trong script.js
                 const res = await fetch(WEB_APP_URL, {
                     method: "POST",
                     body: JSON.stringify({
@@ -124,7 +106,7 @@
                 if (r.success) {
                     statusBox.innerHTML = `<i class="fa-solid fa-circle-check" style="color: #4caf50;"></i> Xác thực thành công!`;
                     localStorage.setItem("userSession", JSON.stringify(r.data));
-                    showToast("Đăng nhập Google thành công!", "success");
+                    showToast("Đăng nhập Google thành công!", "success"); // Vẫn hoạt động nhờ script.js
                     setTimeout(() => window.location.href = 'index.html', 800);
                 } else {
                     statusBox.className = 'error';
