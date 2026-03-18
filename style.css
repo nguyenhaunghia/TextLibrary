@@ -45,7 +45,7 @@ body {
 
 .search-inline {
     display: flex; align-items: center; background: #ffffff;
-    border-radius: var(--rad-lg); padding: 6px 12px; width: 220px; 
+    border-radius: var(--rad-lg); padding: 6px 12px; width: 520px; 
     border: 1px solid var(--border-color);
     box-shadow: 0 2px 8px rgba(72, 202, 228, 0.1);
 }
