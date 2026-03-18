@@ -236,11 +236,42 @@ function renderHeaderL1() {
     });
     head.innerHTML = html + `</tr>`;
     attachResizers();
+    
+    // ✨ BỘ MÁY TÌM KIẾM ĐƯỢC NÂNG CẤP "XUYÊN THẤU" ✨
     const searchInp = el('searchInput');
     if(searchInp) {
         searchInp.oninput = (e) => {
             const q = norm(e.target.value);
-            filteredData = DATA_STORE.folders.filter(f => norm(f[findKey(f, 'foldername')]).includes(q));
+            
+            if (!q) {
+                // Nếu xóa trắng ô tìm kiếm, trả lại toàn bộ Folder ban đầu
+                filteredData = [...DATA_STORE.folders];
+            } else {
+                // 1. Lọc dưới Lớp 3: Tìm các Hồ sơ có Trích yếu hoặc Số ký hiệu khớp từ khóa
+                const matchingProfiles = DATA_STORE.profiles ? DATA_STORE.profiles.filter(p => {
+                    const abstract = norm(p[findKey(p, 'abstract')] || '');
+                    const symbol = norm(p[findKey(p, 'symbolstring')] || '');
+                    return abstract.includes(q) || symbol.includes(q);
+                }) : [];
+
+                // 2. Gom nhóm ID của các Thư mục (Folder) đang chứa những hồ sơ tìm được ở trên
+                const matchingFolderIds = new Set();
+                matchingProfiles.forEach(p => {
+                    const pFolder = p[findKey(p, 'folder')];
+                    if (pFolder) {
+                        // Tách bằng dấu phẩy đề phòng 1 hồ sơ nằm trong nhiều thư mục
+                        pFolder.toString().split(',').forEach(id => matchingFolderIds.add(norm(id.trim())));
+                    }
+                });
+
+                // 3. Lọc hiển thị Lớp 1: Lấy Folder nếu tên nó khớp từ khóa HOẶC ID của nó nằm trong danh sách gom nhóm ở bước 2
+                filteredData = DATA_STORE.folders.filter(f => {
+                    const fName = norm(f[findKey(f, 'foldername')] || '');
+                    const fId = norm(f[findKey(f, 'folder')] || fName); // Lấy khóa folder làm đối chiếu
+                    
+                    return fName.includes(q) || matchingFolderIds.has(fId);
+                });
+            }
             renderFolders();
         };
     }
