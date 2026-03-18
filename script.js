@@ -237,42 +237,99 @@ function renderHeaderL1() {
     head.innerHTML = html + `</tr>`;
     attachResizers();
     
-    // ✨ BỘ MÁY TÌM KIẾM ĐƯỢC NÂNG CẤP "XUYÊN THẤU" ✨
+    // ✨ BỘ MÁY TÌM KIẾM "PHẲNG" FULL TÍNH NĂNG (Bản chuẩn 100%) ✨
     const searchInp = el('searchInput');
     if(searchInp) {
         searchInp.oninput = (e) => {
             const q = norm(e.target.value);
+            const tbody = el('bodyL1'); // Lấy trực tiếp bằng ID cho an toàn tuyệt đối
+            if (!tbody) return;
             
             if (!q) {
-                // Nếu xóa trắng ô tìm kiếm, trả lại toàn bộ Folder ban đầu
+                // 1. Khi xóa trắng ô tìm kiếm -> Trả lại danh sách Thư mục
                 filteredData = [...DATA_STORE.folders];
+                renderFolders(); 
             } else {
-                // 1. Lọc dưới Lớp 3: Tìm các Hồ sơ có Trích yếu hoặc Số ký hiệu khớp từ khóa
+                // 2. Tìm ID của các Thư mục khớp từ khóa (Để hiển thị cả hồ sơ trong thư mục đó)
+                const matchingFolderIds = new Set(
+                    DATA_STORE.folders
+                        .filter(f => norm(f[findKey(f, 'foldername')]).includes(q))
+                        .map(f => id(f, 'folder').toString().toLowerCase())
+                );
+
+                // 3. Quét tìm trực tiếp trong Hồ sơ
                 const matchingProfiles = DATA_STORE.profiles ? DATA_STORE.profiles.filter(p => {
                     const abstract = norm(p[findKey(p, 'abstract')] || '');
                     const symbol = norm(p[findKey(p, 'symbolstring')] || '');
-                    return abstract.includes(q) || symbol.includes(q);
+                    
+                    // Kiểm tra xem hồ sơ này có nằm trong thư mục khớp tên không
+                    const pFolderIds = (p[findKey(p, 'folder')] || '').toString().toLowerCase().split(',').map(s => s.trim());
+                    const isInMatchingFolder = pFolderIds.some(fid => matchingFolderIds.has(fid));
+
+                    return abstract.includes(q) || symbol.includes(q) || isInMatchingFolder;
                 }) : [];
 
-                // 2. Gom nhóm ID của các Thư mục (Folder) đang chứa những hồ sơ tìm được ở trên
-                const matchingFolderIds = new Set();
-                matchingProfiles.forEach(p => {
-                    const pFolder = p[findKey(p, 'folder')];
-                    if (pFolder) {
-                        // Tách bằng dấu phẩy đề phòng 1 hồ sơ nằm trong nhiều thư mục
-                        pFolder.toString().split(',').forEach(id => matchingFolderIds.add(norm(id.trim())));
+                if(matchingProfiles.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="100%" style="text-align:center; padding: 40px; color: #64748b; font-weight: 500;">
+                        <i class="fa-solid fa-folder-open" style="font-size: 30px; color: var(--border-color); margin-bottom: 12px;"></i><br>
+                        Không tìm thấy hồ sơ hoặc thư mục nào chứa từ khóa "${e.target.value}" 😥
+                    </td></tr>`;
+                    return;
+                }
+
+                // 4. Nếu tìm thấy -> Vẽ bảng danh sách Hồ sơ đầy đủ nút bấm
+                let resultHtml = `<tr><td colspan="100%" style="padding: 0; background: var(--bg-body);">
+                    <div class="l3-container" style="max-height: 70vh; margin: 0; border: none; box-shadow: inset 0 2px 10px rgba(0,0,0,0.05);">
+                        <table class="table-l3" style="width: 100%;">
+                            <thead><tr>`;
+                
+                // Đã sửa bỏ "window." ở đây
+                if(UI_CONFIG && UI_CONFIG.L3_COLUMNS) {
+                    UI_CONFIG.L3_COLUMNS.forEach(c => { 
+                        const isHidden = ['fileid', 'accountupdate', 'timeupdate'].includes(c.key);
+                        resultHtml += `<th style="width:${c.width}${isHidden ? ';display:none' : ''}">${c.label}</th>`;
+                    });
+                } 
+                resultHtml += `</tr></thead><tbody>`;
+
+                matchingProfiles.forEach(prof => {
+                    resultHtml += `<tr class="row-folder" style="background: #fff; cursor: default;">`;
+                    if(UI_CONFIG && UI_CONFIG.L3_COLUMNS) {
+                        UI_CONFIG.L3_COLUMNS.forEach(c => {
+                            if(c.key === 'download') {
+                                let fileId = prof[findKey(prof, 'fileid')];
+                                let profId = prof[findKey(prof, 'profileid')];
+                                let tdContent = '';
+
+                                if(fileId) {
+                                    let action = `window.open('https://drive.google.com/file/d/${fileId}/view', '_blank')`;
+                                    tdContent += `<i class="fa-solid fa-file-arrow-down icon-btn" onclick="${action}" title="Tải file"></i>`;
+                                } else {
+                                    tdContent += `<i class="fa-solid fa-file-circle-xmark" style="color:#ddd;" title="Không có file"></i>`;
+                                }
+
+                                if (currentUser && (currentUser.account === ADMIN_EMAIL || currentUser.userId === ADMIN_EMAIL)) {
+                                    tdContent += `<i class="fa-solid fa-trash-can icon-btn" style="color: #d93025; margin-left: 12px;" onclick="deleteProfile('${profId}', '${fileId || ""}')" title="Xóa hồ sơ"></i>`;
+                                }
+
+                                resultHtml += `<td style="text-align:center;">${tdContent}</td>`;
+                            } else {
+                                let v = prof[findKey(prof, c.key)] || "";
+                                if (c.key === 'periodid') v = DATA_STORE.periods[v] || v;
+                                if (c.key === 'doctypeid') v = DATA_STORE.types[v] || v;
+                                if (c.key === 'organizationid') v = DATA_STORE.orgs[v] || v;
+                                
+                                const isHidden = ['fileid', 'accountupdate', 'timeupdate'].includes(c.key);
+                                resultHtml += `<td title="${v}" style="${isHidden ? 'display:none;' : ''}">${v}</td>`;
+                            }
+                        });
                     }
+                    resultHtml += `</tr>`;
                 });
 
-                // 3. Lọc hiển thị Lớp 1: Lấy Folder nếu tên nó khớp từ khóa HOẶC ID của nó nằm trong danh sách gom nhóm ở bước 2
-                filteredData = DATA_STORE.folders.filter(f => {
-                    const fName = norm(f[findKey(f, 'foldername')] || '');
-                    const fId = norm(f[findKey(f, 'folder')] || fName); // Lấy khóa folder làm đối chiếu
-                    
-                    return fName.includes(q) || matchingFolderIds.has(fId);
-                });
+                resultHtml += `</tbody></table></div></td></tr>`;
+                tbody.innerHTML = resultHtml;
             }
-            renderFolders();
         };
     }
 }
